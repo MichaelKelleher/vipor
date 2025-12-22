@@ -1,0 +1,72 @@
+import random
+from typing import List, Tuple
+
+from .cards import Card
+from .deck import Deck
+from .hand_eval import evaluate_hand
+from .paytable import PayTable
+
+
+def apply_hold_and_draw(initial: List[Card], hold_mask: int, deck: Deck) -> List[Card]:
+    """Held cards stay in place; non-held positions are replaced."""
+    replace_positions = [i for i in range(5) if not (hold_mask & (1 << i))]
+    new_cards = deck.draw(len(replace_positions))
+
+    final = initial[:]
+    for pos, new_card in zip(replace_positions, new_cards):
+        final[pos] = new_card
+    return final
+
+
+def expected_payout_mc(
+    initial: List[Card],
+    hold_mask: int,
+    paytable: PayTable,
+    rng: random.Random,
+    trials: int,
+    bet_per_hand: int = 1,
+) -> float:
+    """Monte Carlo EV for a specific hold mask."""
+    total = 0
+    for _ in range(trials):
+        deck = Deck.fresh(rng)
+
+        # Remove the dealt cards from the deck before drawing replacements
+        dealt_set = set(initial)
+        deck.cards = [c for c in deck.cards if c not in dealt_set]
+
+        final = apply_hold_and_draw(initial, hold_mask, deck)
+        cat = evaluate_hand(final).category
+        total += paytable.payout_for(cat) * bet_per_hand
+
+    return total / trials if trials else 0.0
+
+
+def best_hold_mask_mc(
+    initial: List[Card],
+    paytable: PayTable,
+    rng: random.Random,
+    trials_per_mask: int = 200,
+    bet_per_hand: int = 1,
+) -> Tuple[int, float]:
+    """
+    Returns (best_mask, best_ev_payout) where EV is expected payout (not net).
+    """
+    best_mask = 0
+    best_ev = -1.0
+
+    for mask in range(32):  # 0..31
+        ev = expected_payout_mc(
+            initial=initial,
+            hold_mask=mask,
+            paytable=paytable,
+            rng=rng,
+            trials=trials_per_mask,
+            bet_per_hand=bet_per_hand,
+        )
+        if ev > best_ev:
+            best_ev = ev
+            best_mask = mask
+
+    return best_mask, best_ev
+

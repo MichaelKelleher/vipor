@@ -1,0 +1,17 @@
+name: "9/6 Jacks or Better"
+bet_unit: 1
+
+# payout is "per coin" (so bet_unit=1 means these are per-hand if you bet 1 coin)
+# Royal is typically 800 per coin (4000 at 5 coins), but we keep it simple here.
+payouts:
+  royal_flush: 800
+  straight_flush: 50
+  four_of_a_kind: 25
+  full_house: 9
+  flush: 6
+  straight: 4
+  three_of_a_kind: 3
+  two_pair: 2
+  jacks_or_better: 1
+  nothing: 0
+

@@ -1,0 +1,10 @@
+I would like to create a python based video poker simulator where I can put in pay tables and simulate different strategies and compute things like Risk of Ruin for a given stake, EV, etc.
+
+Please outline (briefly) the steps we need such as:
+
+A deck and deal simulation.
+Hot Roll Simulation.
+Pay Table input and management.
+Strategy codification semantic (always keep pairs, keep three or more suited royals, etc.)
+Run controls
+I know this could be quite an effort, but I think it will be fun and help manage our gambling hobby.

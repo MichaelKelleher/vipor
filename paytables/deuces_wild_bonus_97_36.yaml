@@ -1,0 +1,18 @@
+name: Deuces Wild Bonus (IGT) — 97.36%
+
+payouts:
+  natural_royal_flush: 800
+  four_deuces_with_ace: 400
+  four_deuces: 200
+  wild_royal_flush: 25
+  five_aces: 80
+  five_345: 40
+  five_6_to_k: 20
+  straight_flush: 10
+  four_of_a_kind: 4
+  full_house: 3
+  flush: 3
+  straight: 1
+  three_of_a_kind: 1
+  nothing: 0
+
