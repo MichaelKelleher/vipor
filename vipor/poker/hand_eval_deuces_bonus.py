@@ -41,6 +41,34 @@ STRAIGHT_SEQS: List[Tuple[int, int, int, int, int]] = [
     (10, 11, 12, 13, 14),
 ]
 
+# If your ranks are typical poker ints: 2..14 (Ace=14)
+RANK_TO_BIT = {r: (1 << i) for i, r in enumerate(range(2, 15))}
+
+# Replace STRAIGHT_SEQ_MASKS definition with bitwise OR:
+STRAIGHT_SEQ_MASKS = tuple(
+    (RANK_TO_BIT[seq[0]] | RANK_TO_BIT[seq[1]] | RANK_TO_BIT[seq[2]] | RANK_TO_BIT[seq[3]] | RANK_TO_BIT[seq[4]])
+    for seq in STRAIGHT_SEQS
+)
+
+ROYAL_MASK = (
+    RANK_TO_BIT[10] | RANK_TO_BIT[11] | RANK_TO_BIT[12] | RANK_TO_BIT[13] | RANK_TO_BIT[14]
+)
+
+def _can_make_royal(naturals: Sequence[Card], wilds: int) -> bool:
+    natural_mask = _naturals_rank_mask(naturals)
+    missing = (ROYAL_MASK & ~natural_mask).bit_count()
+    return missing <= wilds
+
+# If you want to keep _can_make_sequence around, also speed it up:
+def _can_make_sequence(naturals: Sequence[Card], wilds: int, seq: Tuple[int, ...]) -> bool:
+    natural_mask = _naturals_rank_mask(naturals)
+    seq_mask = 0
+    for r in seq:
+        seq_mask |= RANK_TO_BIT[r]
+    missing = (seq_mask & ~natural_mask).bit_count()
+    return missing <= wilds
+
+
 
 def _count_deuces(cards: Sequence[Card]) -> int:
     return sum(1 for c in cards if c.rank == 2)
@@ -71,9 +99,23 @@ def _can_make_sequence(naturals: Sequence[Card], wilds: int, seq: Tuple[int, ...
     return missing <= wilds
 
 
-def _can_make_any_straight(naturals: Sequence[Card], wilds: int) -> bool:
-    return any(_can_make_sequence(naturals, wilds, seq) for seq in STRAIGHT_SEQS)
+def _naturals_rank_mask(naturals: Sequence[Card]) -> int:
+    m = 0
+    for c in naturals:
+        m |= RANK_TO_BIT[c.rank]
+    return m
 
+
+def _can_make_any_straight(naturals: Sequence[Card], wilds: int) -> bool:
+    natural_mask = _naturals_rank_mask(naturals)
+
+    # For each candidate straight, count how many ranks are missing among naturals.
+    for straight_mask in STRAIGHT_SEQ_MASKS:
+        missing = (straight_mask & ~natural_mask).bit_count()
+        if missing <= wilds:
+            return True
+
+    return False
 
 def _can_make_royal(naturals: Sequence[Card], wilds: int) -> bool:
     return _can_make_sequence(naturals, wilds, ROYAL_SEQ)
@@ -87,28 +129,55 @@ def _can_make_n_of_kind(rc: Dict[int, int], wilds: int, n: int) -> bool:
     # Or created purely from wilds (e.g., 3 deuces = trips)
     return wilds >= n
 
-
 def _can_make_full_house(rc: Dict[int, int], wilds: int) -> bool:
     """
-    Small brute-force: can we allocate wilds to form a 3-of-kind + 2-of-kind?
-    Candidates are natural ranks plus a reasonable rank universe (3..14 excluding 2).
+    Can we allocate wilds to make trips + pair on two different ranks?
+    O(#ranks) approach with no sorting and no nested loops.
     """
-    candidates = set(rc.keys()) | {3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}
+    # Candidate ranks: naturals plus all non-deuce ranks 3..14
+    candidates = set(rc.keys())
+    candidates.update(range(3, 15))  # 3..14 (A)
 
+    # Compute needs for making a pair for each rank; track best and second best
+    best_r = None
+    best_need = 99
+    second_need = 99
+
+    need2: Dict[int, int] = {}
+    need3: Dict[int, int] = {}
+
+    for r in candidates:
+        cnt = rc.get(r, 0)
+
+        n2 = 2 - cnt
+        n3 = 3 - cnt
+
+        n2 = 0 if n2 < 0 else n2
+        n3 = 0 if n3 < 0 else n3
+
+        need2[r] = n2
+        need3[r] = n3
+
+        if n2 < best_need:
+            second_need = best_need
+            best_need = n2
+            best_r = r
+        elif n2 < second_need:
+            second_need = n2
+
+    # If we can't even form any pair rank at all (shouldn't happen), bail
+    if best_r is None:
+        return False
+
+    # For each trips rank, see if there's a pair rank (different) that fits
     for r3 in candidates:
-        c3 = rc.get(r3, 0)
-        need3 = max(0, 3 - c3)
-        if need3 > wilds:
+        w_after = wilds - need3[r3]
+        if w_after < 0:
             continue
-        w_left = wilds - need3
 
-        for r2 in candidates:
-            if r2 == r3:
-                continue
-            c2 = rc.get(r2, 0)
-            need2 = max(0, 2 - c2)
-            if need2 <= w_left:
-                return True
+        pair_need = best_need if r3 != best_r else second_need
+        if pair_need <= w_after:
+            return True
 
     return False
 
