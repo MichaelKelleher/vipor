@@ -1,0 +1,12 @@
+echo "vipor/cli.py"
+cat vipor/cli.py
+echo "vipor/poker/sim.py"
+cat vipor/poker/sim.py
+echo "vipor/poker/strategy.py"
+cat vipor/poker/strategy.py
+echo "vipor/poker/strategy_rules_j_riff.py"
+cat vipor/poker/strategy_rules_j_riff.py
+echo "vipor/poker/hand_eval_deuces_bonus.py"
+cat vipor/poker/hand_eval_deuces_bonus.py
+echo "vipor/poker/hot_roll.py"
+cat vipor/poker/hot_roll.py

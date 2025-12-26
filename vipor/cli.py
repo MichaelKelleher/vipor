@@ -48,6 +48,7 @@ def main() -> None:
 
     # frozen-hand EV mode
     ap.add_argument("--frozen", help='Freeze a hand like "AS 2H 3C 4D KD"')
+    ap.add_argument("--frozen_hand", help='Freeze a hand like "AS 2H 3C 4D KD"')
     ap.add_argument("--hold_mask", type=int, default=0)
     ap.add_argument("--trials", type=int, default=200_000)
 
@@ -66,8 +67,13 @@ def main() -> None:
         help="Given a Hot Roll occurs this hand, chance it triggers on deal (else draw)",
     )
 
-
+    from vipor.poker.frozen import parse_hand, frozen_ev_mc
     args = ap.parse_args()
+    if args.frozen_hand:
+        frozen_hand = parse_hand(args.frozen_hand)
+    else:
+        frozen_hand = []
+    
 
     pt = PayTable.from_yaml(args.paytable)
 
@@ -81,8 +87,8 @@ def main() -> None:
 
     # frozen mode
     if args.frozen:
-        from vipor.poker.frozen import parse_hand, frozen_ev_mc
 
+        hands = parse_hand(args.frozen)
         hand = parse_hand(args.frozen)
         res = frozen_ev_mc(
             paytable=pt,
@@ -101,6 +107,34 @@ def main() -> None:
         print("Trials:", res.trials)
         print(f"Avg payout: {res.avg_payout:.6f}")
         print(f"Avg net:    {res.avg_net:.6f}")
+        print("\nCategory counts (with rough EV contribution):")
+
+        # ---- rough contribution factor ----
+        if args.hot_roll:
+            trig = res.hot_roll_triggered
+            t = (trig / res.hands) if res.hands else 0.0
+            avg_mult = (res.hot_roll_multiplier_sum / trig) if trig else 0.0
+            mult_factor = (1.0 - t) + (t * avg_mult)  # E[mult] per hand, using observed trigger rate
+            per_hit_base = lambda cat: int(pt.payout_for(cat)) * 5  # hot_roll_paytable_bet=5
+        else:
+            mult_factor = 1.0
+            per_hit_base = lambda cat: int(pt.payout_for(cat)) * args.bet
+        print("per_hit_base: ", per_hit_base)
+        # estimate total payout from categories (for “share of take”)
+        est_total_payout = 0.0
+        est_by_cat: Dict[str, float] = {}
+        for cat, cnt in res.category_counts.items():
+            est = cnt * per_hit_base(cat) * mult_factor
+            est_by_cat[cat] = est
+            est_total_payout += est
+
+        # print sorted, with est contribution + share
+        for k in sorted(res.category_counts, key=lambda x: (-res.category_counts[x], x)):
+            v = res.category_counts[k]
+            hit = v / res.hands if res.hands else 0.0
+            est = est_by_cat[k]
+            share = (est / est_total_payout) if est_total_payout else 0.0
+            print(f"  {k:24s} {v:9,d}  {hit:7.3%}  est_payout={est:12,.0f}  share={share:7.2%}")
 
         print("\nCategory counts:")
         for k, v in sorted(res.category_counts.items(), key=lambda kv: (-kv[1], kv[0])):
@@ -142,14 +176,6 @@ def main() -> None:
             hot_roll_paytable_bet=5,
         )
 
-    hot_roll_cfg = None
-    if args.hot_roll:
-        from vipor.poker.hot_roll import HotRollConfig
-        hot_roll_cfg = HotRollConfig(
-            p_per_hand=args.hot_roll_rate,
-            p_deal_given_roll=args.hot_roll_deal_share,
-        )
-
     res = simulate(
         pt,
         hands=args.hands,
@@ -158,6 +184,7 @@ def main() -> None:
         trace_n=args.trace,
         strategy_fn=strategy_fn,
         evaluator=evaluator,
+        frozen_hand=frozen_hand,
         hot_roll_enabled=args.hot_roll,
         hot_roll_cfg=hot_roll_cfg,
         hot_roll_bet_cost=10,
@@ -167,6 +194,29 @@ def main() -> None:
     if args.hot_roll:
         print(f"Hot Roll: enabled  rate={args.hot_roll_rate}  deal_share={args.hot_roll_deal_share}")
         print("Hot Roll: bet_cost=10  paytable_bet=5  multiplier=2d6")
+    if args.hot_roll:
+        sched = res.hot_roll_scheduled
+        trig = res.hot_roll_triggered
+        deal = res.hot_roll_triggered_on_deal
+        draw = res.hot_roll_triggered_on_draw
+        if trig:
+            avg_mult = res.hot_roll_multiplier_sum / trig
+            print(f"  avg 2d6 multiplier (triggered hands): {avg_mult:.3f}")
+
+    print("\nHot Roll stats:")
+    print(f"  scheduled: {sched} ({sched/res.hands:.3%} of hands)")
+    if sched:
+        print(f"  avg hands per scheduled: {res.hands/sched:.3f}")
+
+    print(f"  triggered:  {trig} ({trig/res.hands:.3%} of hands)")
+    if trig:
+        print(f"  avg hands per trigger:   {res.hands/trig:.3f}")
+
+    print(f"  trigger on deal: {deal} ({deal/res.hands:.3%} of hands)")
+    print(f"  trigger on draw: {draw} ({draw/res.hands:.3%} of hands)")
+    if trig:
+        print(f"  deal share (observed): {deal/trig:.3%}")
+
 
     print(f"Paytable: {pt.name}")
     print(f"Ruleset:  {args.ruleset}")
@@ -180,10 +230,47 @@ def main() -> None:
     print(f"EV/hand:  {res.ev_per_hand:.6f}")
     print(f"Return%:  {100.0 * res.return_pct:.4f}%")
 
+    print("\nCategory counts (with rough EV contribution):")
+
+    # ---- rough contribution factor ----
+    if args.hot_roll:
+        trig = res.hot_roll_triggered
+        t = (trig / res.hands) if res.hands else 0.0
+        avg_mult = (res.hot_roll_multiplier_sum / trig) if trig else 0.0
+        mult_factor = (1.0 - t) + (t * avg_mult)  # E[mult] per hand, using observed trigger rate
+        per_hit_base = lambda cat: int(pt.payout_for(cat)) * 5  # hot_roll_paytable_bet=5
+    else:
+        mult_factor = 1.0
+        per_hit_base = lambda cat: int(pt.payout_for(cat)) * args.bet
+
+    # estimate total payout from categories (for “share of take”)
+    est_total_payout = 0.0
+    est_by_cat: Dict[str, float] = {}
+    for cat, cnt in res.category_counts.items():
+        est = cnt * per_hit_base(cat) * mult_factor
+        est_by_cat[cat] = est
+        est_total_payout += est
+
+    # print sorted, with est contribution + share
+    for k in sorted(res.category_counts, key=lambda x: (-res.category_counts[x], x)):
+        v = res.category_counts[k]
+        hit = v / res.hands if res.hands else 0.0
+        est = est_by_cat[k]
+        share = (est / est_total_payout) if est_total_payout else 0.0
+        print(f"  {k:24s} {v:9,d}  {hit:7.3%}  est_payout={est:12,.0f}  share={share:7.2%}")
+
     print("\nCategory counts:")
     for k in sorted(res.category_counts, key=lambda x: (-res.category_counts[x], x)):
         v = res.category_counts[k]
         print(f"  {k:24s} {v:9,d}  {100.0*v/res.hands:6.3f}%")
+    if args.hot_roll:
+        print(
+            res.hot_roll_scheduled,
+            res.hot_roll_triggered,
+            res.hot_roll_triggered_on_deal,
+            res.hot_roll_triggered_on_draw,
+        )
+
 
 
 if __name__ == "__main__":

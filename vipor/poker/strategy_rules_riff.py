@@ -52,10 +52,16 @@ def riff_strategy(cards: List[Card]) -> HoldDecision:
 
     # Pairs
     pairs = pair_ranks(cards)
+    # 2) Prefer low pairs 2–4 (choose the lowest if multiple)
     if 14 in pairs:  # pair of aces
         idx = [i for i, c in enumerate(cards) if c.rank == 14]
         return HoldDecision(mask_from_indices(idx))
 
+    low_35 = [r for r in pairs if 2 <= r <= 4]
+    if low_35:
+        keep_rank = min(low_35)
+        return HoldDecision(mask_from_indices(counts[keep_rank]))
+    
     idx = job_pair_indices(cards)
     if idx:
         return HoldDecision(mask_from_indices(idx))

@@ -6,6 +6,10 @@ from .cards import Card
 
 ROYAL_FLUSH = "royal_flush"
 STRAIGHT_FLUSH = "straight_flush"
+FOUR_ACES_234 = "four_aces_234"
+FOUR_LOW_ACE = "four_low_ace"
+FOUR_ACES = "four_aces"
+FOUR_234 = "four_234"
 FOUR = "four_of_a_kind"
 FULL_HOUSE = "full_house"
 FLUSH = "flush"
@@ -50,7 +54,24 @@ def evaluate_hand(cards: List[Card]) -> HandResult:
         return HandResult(STRAIGHT_FLUSH)
 
     if shape == [4, 1]:
+        quad_rank = next(r for r, c in counts.items() if c == 4)
+        kicker_rank = next(r for r, c in counts.items() if c == 1)
+
+        if quad_rank == 14:
+            # Aces
+            if kicker_rank in (2, 3, 4):
+                return HandResult(FOUR_ACES_234)
+            return HandResult(FOUR_ACES)
+
+        if quad_rank in (2, 3, 4):
+            # 2–4 quads
+            if kicker_rank in (14, 2, 3, 4):
+                return HandResult(FOUR_LOW_ACE)
+            return HandResult(FOUR_234)
+
+        # 5–K quads
         return HandResult(FOUR)
+
     if shape == [3, 2]:
         return HandResult(FULL_HOUSE)
     if flush:

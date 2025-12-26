@@ -1,0 +1,18 @@
+name: "JoB Triple Double"
+bet_unit: 1
+payouts:
+  royal_flush: 800
+  straight_flush: 50
+  four_aces_234: 800
+  four_low_ace: 400
+  four_aces: 160
+  four_234: 80
+  four_of_a_kind: 50
+  full_house: 9
+  flush: 6
+  straight: 4
+  three_of_a_kind: 2
+  two_pair: 1
+  jacks_or_better: 1
+  nothing: 0
+
